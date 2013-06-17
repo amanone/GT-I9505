@@ -64,10 +64,6 @@
 
 #include "audit.h"
 
-#ifdef CONFIG_PROC_AVC
-#include <linux/proc_avc.h>
-#endif
-
 /* No auditing will take place until audit_initialized == AUDIT_INITIALIZED.
  * (Initialization happens after skb_init is called.) */
 #define AUDIT_DISABLED		-1
@@ -84,7 +80,7 @@ int		audit_ever_enabled;
 EXPORT_SYMBOL_GPL(audit_enabled);
 
 /* Default state when kernel boots without any parameters. */
-static int	audit_default = 1;
+static int	audit_default;
 
 /* If auditing cannot proceed, audit_failure selects what happens. */
 static int	audit_failure = AUDIT_FAIL_PRINTK;
@@ -255,12 +251,12 @@ void audit_log_lost(const char *message)
 	}
 
 	if (print) {
-		printk(KERN_WARNING
-			"audit: audit_lost=%d audit_rate_limit=%d "
-			"audit_backlog_limit=%d\n",
-			atomic_read(&audit_lost),
-			audit_rate_limit,
-			audit_backlog_limit);
+			printk(KERN_WARNING
+				"audit: audit_lost=%d audit_rate_limit=%d "
+				"audit_backlog_limit=%d\n",
+				atomic_read(&audit_lost),
+				audit_rate_limit,
+				audit_backlog_limit);
 		audit_panic(message);
 	}
 }
@@ -386,14 +382,10 @@ static void audit_hold_skb(struct sk_buff *skb)
 static void audit_printk_skb(struct sk_buff *skb)
 {
 	struct nlmsghdr *nlh = nlmsg_hdr(skb);
-#ifdef CONFIG_PROC_AVC
 	char *data = NLMSG_DATA(nlh);
-#endif
 
 	if (nlh->nlmsg_type != AUDIT_EOE) {
-#ifdef CONFIG_PROC_AVC
-		sec_avc_log("%s\n", data);
-#endif
+		printk(KERN_NOTICE "type=%d %s\n", nlh->nlmsg_type, data);
 	}
 
 	audit_hold_skb(skb);
@@ -412,18 +404,9 @@ static void kauditd_send_skb(struct sk_buff *skb)
 		audit_pid = 0;
 		/* we might get lucky and get this in the next auditd */
 		audit_hold_skb(skb);
-	} else {
-#ifdef CONFIG_PROC_AVC
-		struct nlmsghdr *nlh = nlmsg_hdr(skb);
-		char *data = NLMSG_DATA(nlh);
-	
-		if (nlh->nlmsg_type != AUDIT_EOE) {
-			sec_avc_log("%s\n", data);
-		}
-#endif
+	} else
 		/* drop the extra reference if sent ok */
 		consume_skb(skb);
-	}
 }
 
 static int kauditd_thread(void *dummy)
